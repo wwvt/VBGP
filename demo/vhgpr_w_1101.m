@@ -1,9 +1,5 @@
 function [out1, out2, mutst, diagSigmatst, atst, diagCtst]= vhgpr_w_1101(LambdaTheta, covfunc1, covfunc2, fixhyp, X, y, A, Xtst)
-% WW edited: A should be an input
-% WW edited 10/27/2017
-% Last update: 10/15/2017 minimize problems
-%covfunc1 = covfuncSignal; covfunc2 = covfuncNoise;
-% VHGPR - MV bound for heteroscedastic GP regression
+% Last update: 9/18/2018 
 % Input:    - LambdaTheta: Selected values for [Lambda hyperf hyperg mu0].
 %           - covfunc1: Covariance function for the GP f (signal).
 %           - covfunc2: Covariance function for the GP g (noise).
@@ -49,36 +45,21 @@ function [out1, out2, mutst, diagSigmatst, atst, diagCtst]= vhgpr_w_1101(LambdaT
 for l = 1:n
    Y(l)  = mean(y(l).n); 
    bd(l) = sum((y(l).n).^2);
-%   Vhat(l) = var(y(l).n,0,2);
 end
  
 % Parameter initialization
 ntheta1 = eval(feval(covfunc1{:}));
 ntheta2 = eval(feval(covfunc2{:}));
 
-% if n+ntheta1+ntheta2+1 ~= size(LambdaTheta,1),error('Incorrect number of parameters');end
-% Lambda = exp(LambdaTheta(1:n));
-% theta1 = LambdaTheta(n+1:n+ntheta1);
-% theta2 = LambdaTheta(n+ntheta1+1:n+ntheta1+ntheta2);
-% delta0 = LambdaTheta(n+ntheta1+ntheta2+1);
-% mu0 = 0;
-% Kf = feval(covfunc1{:},theta1, X);
-% Kg = feval(covfunc2{:},theta2, X);
-
-
-% ------------WW edited------------%
-% 
 nV = sum(A,2); % # replications need to be calculated within the function
-withoutrep = any(nV==1);  %**************************
-
-  nn = sum(nV); % total budget, i.e. total number of replications
+nn = sum(nV); % total budget, i.e. total number of replications
 if n+ntheta1+ntheta2+1 ~= size(LambdaTheta,1),error('Incorrect number of parameters');end
 Lambda = exp(LambdaTheta(1:n));
 theta1 = LambdaTheta(n+1:n+ntheta1);
 theta2 = LambdaTheta(n+ntheta1+1:n+ntheta1+ntheta2);
 delta0 = LambdaTheta(n+ntheta1+ntheta2+1);
 
-mu0 = 0;
+mu0 = 0; % beta0
 Kf = feval(covfunc1{:},theta1, X);
 Kg = feval(covfunc2{:},theta2, X);
 
@@ -88,27 +69,21 @@ sLambda = sqrt(Lambda);
 cinvB = chol(eye(n) + Kg.*(sLambda*sLambda'))'\eye(n);   % O(n^3)
 cinvBs = cinvB.*(ones(n,1)*sLambda');
 hBLK2 = cinvBs*Kg;                                         % O(n^3)
-Sigma = Kg - hBLK2'*hBLK2;                                 % O(n^3) (will need the full matrix for derivatives)
-
-%IKDinv = (eye(n) + Kg * DD)\eye(n);
-IKDinv = cinvB' * cinvB; % same thing
-%KDinv = ((Kg\eye(n)) + DD)\eye(n);
-KDinv = Kg * IKDinv; % same thing
+Omega = Kg - hBLK2'*hBLK2;           % same as Omega=inv(inv(Kg)+DD); 
+IKDinv = cinvB' * cinvB; % same as IKDinv = (eye(n) + Kg * DD)\eye(n);
+%Omega = Kg * IKDinv; % same as KDinv = ((Kg\eye(n)) + DD)\eye(n) = Omega;
    
- %Sigma = (Kg\eye(n) + DD)\eye(n);  % same thing    %*********************
-  mu =((ones(1,n) * diag(Lambda)-0.5*nV')* Kg + delta0.*ones(1,n))'; %ones(n,1) * 0; 
-% mu = Kg * (Lambda-0.5) + delta0; % make a difference %wrong in our case
- %  mucheck = Kg * DD * ones(n,1) - 1/2. * Kg * nV; %same when delta0=0 
+mu = Kg*(  DD*ones(n,1)-0.5*nV)+ ones(n,1).*delta0; %ones(n,1) * 0; 
   
-  Rdiag = exp(mu-diag(Sigma)/2);
+  Rdiag = exp(mu-diag(Omega)/2); 
   R = diag(repelem(Rdiag,nV));
   Rdiaginv = diag(1./(Rdiag));
   Rinv = diag(1./repelem(Rdiag,nV));  
  % M = A'* Kf *A + R;
-  Phi = diag(Rdiag./nV);
+  Phi = diag(Rdiag./nV); %Sigma_varepsilon'
   G = Kf+Phi;
   Ginv = (Kf+Phi)\eye(n);
-  MlogDet = sum((mu-diag(Sigma)./2).*(nV-1) + log(nV)) + log(det(G));  
+  MlogDet = sum((mu-diag(Omega)./2).*(nV-1) + log(nV)) + log(det(G));  
     % MlogDet = log(det(M)); % same
   yy=[];
     
@@ -134,32 +109,11 @@ Rscale = 1./(1+p./diag(R));
     yy = [yy,(y(i).n)];
   end
 
-%      goal = (yy-mu0) * Rinv * (yy-mu0)' 
-%      goalchecked = sum((yy-mu0).^2'./repelem(Rdiag,nV))
-%      goalcheck =  bd * inv(Phi)/diag(nV) * ones(n,1)
-%   goalchecks = bd * Rdiaginv * ones(n,1)
-
-% if  withoutrep == 1  %************************************
 %     F1 = -0.5 *(nn*log(2*pi)+MlogDet+ sum((yy).^2'./repelem(Rdiag,nV)) - Y' * diag(nV./Rdiag) * Kf * Ginv * Y);% O(m3)
-    Minv = Rinv - Rinv * A' * Kf * Ginv * Phi * A * Rinv;
-   % -0.5*nn*log(2*pi) %normal
-   %  -0.5*MlogDet %normal
-   %------------scaling test---------------%
-
- 
-%   previous = -0.5*(yy-mu0) * Minv * (yy-mu0)';
-%  scalingtest = -0.5*(yy-mu0) * alpha ;% same. not helpful.
-    %------------scaling test---------------%
-
-    F1 = -0.5*(nn*log(2*pi)+MlogDet+(yy-mu0) * Minv * (yy-mu0)'); % O(n3) same.
-%  else
-%         Minv = Rinv - Rinv * A' * Kf * Ginv * Phi * A * Rinv;
-%         F1 = -0.5*(nn*log(2*pi)+MlogDet+(yy) * Minv * (yy)');
-%   end
-  
-  F2 = -0.25 .* nV' * diag(Sigma);
-%  F3 = -KLdiv(mu,repelem(delta0,n)',Sigma,Kg);  %***************************
-  F3 = -KLdiv(mu,repelem(delta0,n)',Sigma,Kg);  %*************************** KLdiv definition corrected
+  Minv = Rinv - Rinv * A' * Kf * Ginv * Phi * A * Rinv;
+  F1 = -0.5*(nn*log(2*pi)+MlogDet+(yy-mu0) * Minv * (yy-mu0)'); % O(n3) same.
+  F2 = -0.25 .* nV' * diag(Omega);
+  F3 = -KLdiv(mu,repelem(delta0,n)',Omega,Kg);  %*************************** KLdiv definition corrected
 
   F = F1+F2+F3;
   out1 = -F;
@@ -174,126 +128,72 @@ out2=zeros(n+1+ntheta1+ntheta2,1);
     
     % wrt Lambda
 
-%   for i = 1:n    
-%             dDD = zeros(n);
-%             dDD(i,i) = 1;
-%             temp = Kg * dDD * ones(n,1);
-%             dmuD = temp(i);
-%             temp2  = -KDinv * dDD * KDinv;
-%             dSigmaD = temp2(i,i);
-%             temp3 = Rdiag(i);
-%             dRDi = temp3 * dmuD - 1/2 * temp3 * dSigmaD; 
-%             dRD = zeros(nn);
-% 
-%           for j=  (sum(nV(1:i-1))+1):(sum(nV(1:i)))
-%             dRD(j,j) = dRDi;
-%           end
-%             dBD  = exp(-theta2(end))* A * inv(R) *  dRD * inv(R)  * A';  %**********************
-%             dFLambda(i)= trace(-dBD*BBinv)+ trace(IBKinv*dBD* Kf) + bd * dBD * ones(n,1) + ...
-%                        (-1)*(Y' * (eye(n) - BB * Kf * IBKinv) * dBD * Kf * IBKinv * BB' * Y ) +...
-%                        (-1)* Y'* BB * Kf*  IBKinv * dBD* Y + ...
-%                        trace(IKDinv * Kg * dDD) -  trace(IKDinv * Kg * dDD * IKDinv ) + ...
-%                        2*  ones(n,1)' * dDD * Kg * DD * ones(n,1)  + ...
-%                        (-1)* (ones(n,1)'* Kg  * dDD * ones(n,1)) - 1/2 *trace(KDinv * dDD *  KDinv);
-%   end
-%     out2(1:n) = dFLambda'/2;
- 
-    
-      for i = 1:n    
+
+     dRD = zeros(n);
+
+      for i = 1:n
             dDD = zeros(n);
             dDD(i,i) = 1;
-            temp = Kg * dDD * ones(n,1);
-            dmuD = temp(i);
-            temp2  = -KDinv * dDD * KDinv;
-            dSigmaD = temp2(i,i);
-            temp3 = Rdiag(i);
-            dRDi = temp3 * dmuD - 1/2 * temp3 * dSigmaD; 
+            temp = Kg * dDD * ones(n,1); % d mu/d D_{ii}
+            temp2  = -Omega * dDD * Omega;
             
-            dRD = zeros(n);
-            dRD(i,i) = dRDi ;
- 
-        %    dBD  = -diag(1./nV) * Rdiaginv *  dRD * Rdiaginv;  %**********************
-            dBD  = -diag(nV) * Rdiaginv *  dRD * Rdiaginv;  %**********************
-            dFLambda(i)= trace(-dBD*BBinv)+ trace(IBKinv*dBD* Kf) + bd * dBD * (1./nV) + ... %% * ones(n,1) 
-                       (-1)*(Y' * (eye(n) - BB * Kf * IBKinv) * dBD * Kf * IBKinv * BB' * Y ) +...
-                       (-1)* Y'* BB * Kf*  IBKinv * dBD* Y + ...
-                       trace(IKDinv * Kg * dDD) -  trace(IKDinv * Kg * dDD * IKDinv ) + ...
-                       2*  ones(n,1)' * dDD * Kg * DD * ones(n,1)  + ...
-                       (-1)* (ones(n,1)'* Kg  * dDD * ones(n,1)) - 1/2 *trace(KDinv * dDD *  KDinv);
-       end
-    out2(1:n) = Lambda.*dFLambda'/2;   %**************************
-    
-    
- %<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+            for j =1:n
+            dmuD = temp(j); % d mu_j / d D_{ii}
+            dSigmaD = temp2(j,j);
+            temp3 = Rdiag(j);
+            dRDi = temp3 * dmuD - 1/2 * temp3 * dSigmaD; 
+            dRD(j,j) = dRDi ;
+            end
+                   
+             dBDtemp=(-diag(nV) * Rdiaginv * dRD * Rdiaginv);
+             dBD  = dBDtemp;  %**********************
+%           dBD  = -diag(1./nV) * Rdiaginv *  dRD * Rdiaginv;  %**********************
 
+             dFLambda(i)=  trace(-dBD*BBinv)+ trace(IBKinv*dBD* Kf) +  ... 
+                bd * dBD * (1./nV) +(-1)*(Y' * (eye(n) - BB * Kf * IBKinv) * dBD * Kf * IBKinv * BB' * Y ) +...
+                (-1)* Y'* BB * Kf*  IBKinv * dBD* Y   + ...
+                           trace(Omega * dDD) -  trace(Omega * dDD * Omega * inv(Kg) ) + ...
+                           trace((Kg * DD * ones(n,1)*ones(n,1)'+ ones(n,1)*ones(n,1)'*DD * Kg -ones(n,1)*ones(n,1)'*Kg)*dDD)- 1/2 *trace(Omega * dDD *  Omega);
+      end
+    out2(1:n) = Lambda.*dFLambda'/2;   %**************************
+                    %  
+
+ 
+ %<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
     if fixhyp < 1       % fixhyp = 0, do this. 
     % wrt Kf hyperparameters
             for k = 1:ntheta1
              dKthetaf  = feval(covfunc1{:}, theta1, X, k);
-           %  dFthetaf = sum(sum(IBKinv * BB  - BB' * Y *  Y' * BB' * IBKinv' + IBKinv' * Kf'* BB' *Y*Y'  * BB' *   IBKinv'  * BB ).*dKthetaf);
-          dFthetaf = trace(IBKinv * BB*dKthetaf) - (Y' * BB * (eye(n) - Kf * IBKinv *BB) * dKthetaf * IBKinv * BB * Y );
-           out2(n+k) = dFthetaf/2;
+             dFthetaf = trace(IBKinv * BB*dKthetaf) - (Y' * inv((BBinv+Kf)) * dKthetaf * inv((BBinv+Kf)) * Y ); %same
+             out2(n+k) = dFthetaf/2;
             end
     end
     
  
     if fixhyp < 2         %  fixhyp = 0, do this
-%<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-%         % wrt Kg hyperparameters
-%     for k = 1:ntheta2    
-%     dKthetag = feval(covfunc2{:}, theta2, X, k); 
-%    % temp = dKthetag * DD * ones(n,1);
-%     temp = dKthetag * (DD * ones(n,1)-0.5*nV);  %*********************
-%     temp2  = KDinv * inv(Kg) * dKthetag * inv(Kg) * KDinv;
-%        
-%     dRthetag = zeros(nn);
-%     for i = 1:n
-%     dmuthetag = temp(i);
-%     dSigmathetag = temp2(i,i);
-%     temp3 = Rdiag(i);
-%     dRthetagi = temp3 * dmuthetag - 1/2 * temp3 * dSigmathetag; 
-%     for j=  (sum(nV(1:i-1))+1):(sum(nV(1:i)))
-%     dRthetag(j,j) = dRthetagi;
-%     end
-%     end
-%     dBdthetag = exp(-theta2(end))* A * inv(R)  *  dRthetag * inv(R)  * A'; %*************************
-%     dFthetag= trace(-dBdthetag*BBinv)+ trace(IBKinv*dBdthetag* Kf) + bd * dBdthetag * ones(n,1) + ...
-%                (-1)*(Y' * (eye(n) - BB * Kf * IBKinv) * dBdthetag * Kf * IBKinv * BB' * Y ) +...
-%                (-1)* Y'* BB * Kf*  IBKinv * dBdthetag* Y + ...
-%                trace(IKDinv * dKthetag * DD) -  trace(IKDinv * dKthetag * DD * IKDinv ) + ...
-%                ones(n,1)' * (DD - eye(n)) * dKthetag * DD * ones(n,1)  + ...
-%                1/2 *trace(KDinv * inv(Kg) *  dKthetag * inv(Kg) *  KDinv) + ...
-%                -1/4* nV' * dKthetag *  nV + ones(n,1)' * dKthetag *(nV/2);
-%         out2(n+ntheta1+k) = dFthetag/2;
-%     end
-
-
     % wrt Kg hyperparameters
     for k = 1:ntheta2    
     dKthetag = feval(covfunc2{:}, theta2, X, k); 
-   % temp = dKthetag * DD * ones(n,1);
     temp = dKthetag * (DD * ones(n,1)-0.5*nV);  %*********************
-   % temp2  = KDinv * inv(Kg) * dKthetag * inv(Kg) * KDinv;
     temp2  = IKDinv * dKthetag * IKDinv; %theoretically same, numerically different
        
    
+       dRthetag = zeros(n);
             for i = 1:n
             dmuthetag = temp(i);
             dSigmathetag = temp2(i,i);
             temp3 = Rdiag(i);
             dRthetagi = temp3 * dmuthetag - 1/2 * temp3 * dSigmathetag; 
 
-            dRthetag = zeros(n);
             dRthetag(i,i) = dRthetagi;
             end
-%    dBdthetag = -diag(1./nV) * Rdiaginv* dRthetag * Rdiaginv; %*************************
-    dBdthetag = -diag(nV) * Rdiaginv* dRthetag * Rdiaginv; %*************************
+    dBdthetag = -diag(nV) * Rdiaginv * dRthetag * Rdiaginv; %*************************
     dFthetag= trace(-dBdthetag*BBinv)+ trace(IBKinv*dBdthetag* Kf) + bd * dBdthetag * (1./nV) + ...
                (-1)*(Y' * (eye(n) - BB * Kf * IBKinv) * dBdthetag * Kf * IBKinv * BB' * Y ) +...
                (-1)* Y'* BB * Kf*  IBKinv * dBdthetag* Y + ...
                trace(IKDinv * dKthetag * DD) -  trace(IKDinv * dKthetag * DD * IKDinv ) + ...
                ones(n,1)' * (DD - eye(n)) * dKthetag * DD * ones(n,1)  + ...
-               1/2 *trace(KDinv * inv(Kg) *  dKthetag * inv(Kg) *  KDinv) + ...
+               1/2 *trace(Omega * inv(Kg) *  dKthetag * inv(Kg) *  Omega) + ...
                -1/4* nV' * dKthetag *  nV + ones(n,1)' * dKthetag *(nV/2);
         out2(n+ntheta1+k) = dFthetag/2;
     end
@@ -302,23 +202,6 @@ out2=zeros(n+1+ntheta1+ntheta2,1);
 %<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
     % wrt mu0
-
-%            dRmu0 = zeros(nn);
-%  for i = 1:n
-%     temp4 = Rdiag(i);
-%     dRmu0i = temp4; 
-%     for j=  (sum(nV(1:i-1))+1):(sum(nV(1:i)))
-%     dRmu0(j,j) = dRmu0i;
-%     end
-%  end
-%     
-%     dBmu0 = exp(-theta2(end))* A * inv(R)  *  dRmu0 * inv(R)   * A'; %**********************************
-%     
-%    dFmu0= trace(-BBinv* dBmu0)+ trace(IBKinv*dBmu0* Kf) + bd * dBmu0 * ones(n,1) + ...
-%                (-1)*(Y' * (eye(n) - BB * Kf * IBKinv) * dBmu0 * Kf * IBKinv * BB' * Y ) +...
-%                (-1)* Y'* BB * Kf*  IBKinv * dBmu0* Y + (nV - ones(n,1))'*ones(n,1);
-%     out2(n+ntheta1+ntheta2+1) = dFmu0/2;
-%     end
 
 
     dRmu0 = zeros(n);
