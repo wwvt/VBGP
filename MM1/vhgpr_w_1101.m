@@ -28,14 +28,6 @@ function [out1, out2, mutst, diagSigmatst, atst, diagCtst]= vhgpr_w_1101(LambdaT
 %
 % Modes:    Testing (all inputs are given) / Training (last input is omitted)
 %
-% The algorithm in this file is based on the following paper:
-% M. Lazaro Gredilla and M. Titsias, 
-% "Variational Heteroscedastic Gaussian Process Regression"
-% Published in ICML 2011
-%
-% See also: vhgpr_ui
-%
-% Copyright (c) 2011 by Miguel Lazaro Gredila
 
 [n,D] = size(X); 
 
@@ -234,8 +226,8 @@ out2=zeros(n+1+ntheta1+ntheta2,1);
   mutst= pb;  
   out1 = atst;                                              % predicted mean  y
  if nargout > 1
-  pc = theta1(end)-diag((rf)' * Ginv *rf);
-  pd = theta2(end) - diag((rdelta)' * ((Kg+diag(1./Lambda))\eye(n)) * rdelta);
+  pc = K1ss-diag((rf)' * Ginv *rf);
+  pd = K2ss - diag((rdelta)' * ((Kg+diag(1./Lambda))\eye(n)) * rdelta);
   diagCtst=pc;
   diagSigmatst = pd;
   out2 = diagCtst + exp(mutst+diagSigmatst/2);              % predicted variance y   = pc + exp(pb+pd/2);; % predicted variance y
