@@ -74,9 +74,9 @@ LambdaTheta = [log(0.5)*ones(k,1);loghyperSignal;loghyperNoise;mu0]; % D + 2 + 2
 
 display('Running VBGP...')
 [LambdaTheta, convergence0] = minimize(LambdaTheta, 'vhgpr_w_1101', 30, covfuncSignal, covfuncNoise, 2, x_tr, y_tr, A);
-[LambdaTheta, convergence] = minimize(LambdaTheta, 'vhgpr_w_1101', 100, covfuncSignal, covfuncNoise, 0, x_tr, y_tr, A); % A added
+[LambdaTheta, convergence] = minimize(LambdaTheta, 'vhgpr_w_1101', 100, covfuncSignal, covfuncNoise, 0, x_tr, y_tr, A); 
  % prediction
-[Ey, Vy, mutst, diagSigmatst, atst, diagCtst]= vhgpr_w_1101(LambdaTheta, covfuncSignal, covfuncNoise, 0, x_tr, y_tr, A, x_tst); % A added
+[Ey, Vy, mutst, diagSigmatst, atst, diagCtst]= vhgpr_w_1101(LambdaTheta, covfuncSignal, covfuncNoise, 0, x_tr, y_tr, A, x_tst); 
 %%
 figure
 plot(XK, Ey,'r', XK, trueYK,'k') %predicted mean v.s. true mean
