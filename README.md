@@ -1,5 +1,6 @@
 # VBGP
-A Variational Inference-based Heteroscedastic Gaussian Process Approach for Simulation Metamodeling
+
+#A Variational Inference-based Heteroscedastic Gaussian Process Approach for Simulation Metamodeling
 
 
 
