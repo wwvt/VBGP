@@ -10,7 +10,7 @@ Before starting, please see `VBGP/demo/demo_VBGP_w.m ` for a demo example using 
 The algorithm in this file is based on the following paper: 
 W. Wang, N. Chen, X. Chen, and L. Yang, "A Variational Inference-based Heteroscedastic Gaussian Process Approach for Simulation Metamodeling".
 
-- The code in this file is based on [VHGP MATLAB package](http://www.tsc.uc3m.es/~miguel/downloads.php) for "Variational Heteroscedastic Gaussian Process Regression" provided by M. Lazaro Gredilla and M. Titsias, and [GPML Matlab Code version 4.2](http://www.gaussianprocess.org/gpml/code/matlab/doc/) provided by Rasmussen and Williams: Gaussian Processes for Machine Learning.
+- The code in this file is based on [VHGP MATLAB package](http://www.tsc.uc3m.es/~miguel/downloads.php) provided by M. Lazaro Gredilla and M. Titsias, and [GPML Matlab Code version 4.2](http://www.gaussianprocess.org/gpml/code/matlab/doc/) provided by Rasmussen and Williams: Gaussian Processes for Machine Learning.
 
 # How To Use
 
